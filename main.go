@@ -2,30 +2,69 @@ package main
 
 import (
 	"fmt"
+	"crypto/ed25519"
 	//"context"
-	"strings"
-
-	"github.com/gagliardetto/solana-go"
+	"sync/atomic"
+	//"strings"
+	"time"
+	"runtime"
+	"math/rand"
+	//"github.com/gagliardetto/solana-go"
+	"github.com/mr-tron/base58"
   //"github.com/gagliardetto/solana-go/rpc"
 )
 
-func main() {
-	
-	prefix := "ab"
-	//found := 0
+type Result struct {
+    pubkey  string
+    privkey ed25519.PrivateKey
+}
+
+func generateWallet(prefix string, total *int64, resultChan chan Result, stopChan chan struct{}) {
+	//checkBytes := len(prefix)*5/4 + 4
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	prefixLen := len(prefix)
 	for {
-		account := solana.NewWallet()
-		pubkey := account.PublicKey().String()
+		select {
+		case <-stopChan:
+			return
+		default:
+		}
 
+		pub, priv, _ := ed25519.GenerateKey(rng)
+		atomic.AddInt64(total, 1)
 
-	  fmt.Println("Account pub key: ", pubkey)
-
-		if strings.HasPrefix(pubkey, prefix) {
-			fmt.Println("Match found")
-			fmt.Println("Account pub key: ", pubkey)
-			fmt.Println("Account private key: ", account.PrivateKey)
-			break
+		full := base58.Encode(pub)
+		if len(full) >= prefixLen && full[:prefixLen] == prefix {
+			resultChan <- Result{pubkey: full, privkey: priv}
+			return
 		}
 	}
+}
 
+func main() {
+	resultChan := make(chan Result)
+	stopChan := make(chan struct{})
+	var total int64
+	start := time.Now()
+  ticker := time.NewTicker(time.Second)
+
+	fmt.Printf("starting %d workers\n", runtime.NumCPU())
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go generateWallet("joey", &total, resultChan, stopChan)
+	}
+
+	go func() {
+    for range ticker.C {
+      t := atomic.LoadInt64(&total)
+      elapsed := time.Since(start).Seconds()
+      fmt.Printf("%d wallets | %.2f per second\n", t, float64(t)/elapsed)
+    }
+  }()
+
+	result := <-resultChan
+	close(stopChan)
+	fmt.Println("Match found")
+	fmt.Println("pub:", result.pubkey)
+	fmt.Println("priv:", base58.Encode(result.privkey))
 }
