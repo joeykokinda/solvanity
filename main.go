@@ -3,13 +3,10 @@ package main
 import (
 	"fmt"
 	"crypto/ed25519"
-	//"context"
 	"sync/atomic"
-	//"strings"
 	"time"
 	"runtime"
 	"math/rand"
-	//"github.com/gagliardetto/solana-go"
 	"github.com/mr-tron/base58"
   //"github.com/gagliardetto/solana-go/rpc"
 )
